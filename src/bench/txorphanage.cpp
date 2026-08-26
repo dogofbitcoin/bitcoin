@@ -65,7 +65,13 @@ static void OrphanageSinglePeerEviction(benchmark::Bench& bench)
     for (unsigned int i{0}; i < NUM_TINY_TRANSACTIONS; ++i) {
         tiny_txs.emplace_back(MakeTransactionBulkedTo(1, TINY_TX_WEIGHT, det_rand));
     }
-    auto large_tx = MakeTransactionBulkedTo(1, MAX_STANDARD_TX_WEIGHT, det_rand);
+    // Cap the large transaction to the global usage limit. MakeTxOrphanage permits transactions up to
+    // MAX_STANDARD_TX_WEIGHT, but policy may raise that limit beyond what the orphanage's reserved
+    // per-peer usage can hold (e.g. $DOG Mode), which would make the transaction impossible to fit and
+    // break the expected-eviction arithmetic below.
+    static constexpr node::TxOrphanage::Usage LARGE_TX_WEIGHT{
+        MAX_STANDARD_TX_WEIGHT < node::DEFAULT_RESERVED_ORPHAN_WEIGHT_PER_PEER ? MAX_STANDARD_TX_WEIGHT : node::DEFAULT_RESERVED_ORPHAN_WEIGHT_PER_PEER};
+    auto large_tx = MakeTransactionBulkedTo(1, LARGE_TX_WEIGHT, det_rand);
     assert(GetTransactionWeight(*large_tx) <= MAX_STANDARD_TX_WEIGHT);
 
     const auto orphanage{node::MakeTxOrphanage(/*max_global_latency_score=*/node::DEFAULT_MAX_ORPHANAGE_LATENCY_SCORE, /*reserved_peer_usage=*/node::DEFAULT_RESERVED_ORPHAN_WEIGHT_PER_PEER)};
@@ -93,6 +99,13 @@ static void OrphanageSinglePeerEviction(benchmark::Bench& bench)
     assert(orphanage->TotalLatencyScore() <= orphanage->MaxGlobalLatencyScore());
     assert(orphanage->TotalOrphanUsage() + TINY_TX_WEIGHT > orphanage->MaxGlobalUsage());
 
+    // Expected evictions: enough tiny transactions must be evicted to cover the usage deficit after
+    // adding the large transaction. The large transaction itself raises the announcement count by
+    // one, so subtract it from the expected number evicted during the trim.
+    const auto expected_deficit{orphanage->TotalOrphanUsage() + GetTransactionWeight(*large_tx) - orphanage->MaxGlobalUsage()};
+    assert(expected_deficit > 0 && expected_deficit <= orphanage->TotalOrphanUsage());
+    const auto expected_evictions{(expected_deficit + TINY_TX_WEIGHT - 1) / TINY_TX_WEIGHT - 1};
+
     bench.epochs(1).epochIterations(1).run([&]() NO_THREAD_SAFETY_ANALYSIS {
         // Lastly, add the large transaction.
         const auto num_announcements_before_trim{orphanage->CountAnnouncements()};
@@ -104,7 +117,7 @@ static void OrphanageSinglePeerEviction(benchmark::Bench& bench)
 
         // The number of evictions is the same regardless of the number of peers. In both cases, we can exceed the
         // usage limit using 1 maximally-sized transaction.
-        assert(num_evicted == MAX_STANDARD_TX_WEIGHT / TINY_TX_WEIGHT);
+        assert(num_evicted == expected_evictions);
     });
 }
 static void OrphanageMultiPeerEviction(benchmark::Bench& bench)
@@ -117,7 +130,7 @@ static void OrphanageMultiPeerEviction(benchmark::Bench& bench)
     // Subtract 4 because BulkTransaction rounds up and we must avoid going over the weight limit early.
     static constexpr node::TxOrphanage::Usage LARGE_TX_WEIGHT{TOTAL_USAGE_LIMIT / NUM_UNIQUE_TXNS - 4};
     static_assert(LARGE_TX_WEIGHT >= TINY_TX_WEIGHT * 2, "Tx is too small, increase NUM_PEERS");
-    // The orphanage does not permit any transactions larger than 400'000, so this test will not work if the large tx is much larger.
+    // The orphanage does not permit any transactions larger than MAX_STANDARD_TX_WEIGHT, so this test will not work if the large tx is much larger.
     static_assert(LARGE_TX_WEIGHT <= MAX_STANDARD_TX_WEIGHT, "Tx is too large, decrease NUM_PEERS");
 
     FastRandomContext det_rand{true};
