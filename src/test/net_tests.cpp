@@ -139,6 +139,89 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test)
     BOOST_CHECK_EQUAL(pnode4->ConnectedThroughNetwork(), Network::NET_ONION);
 }
 
+BOOST_AUTO_TEST_CASE(cnode_dog_mode_conn_test)
+{
+    NodeId id = 0;
+
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c001;
+
+    CAddress addr = CAddress(CService(ipv4Addr, 7777), NODE_NETWORK);
+    std::string pszDest;
+
+    std::unique_ptr<CNode> pnode = std::make_unique<CNode>(id++,
+                                                           /*sock=*/nullptr,
+                                                           addr,
+                                                           /*nKeyedNetGroupIn=*/0,
+                                                           /*nLocalHostNonceIn=*/0,
+                                                           CAddress(),
+                                                           pszDest,
+                                                           ConnectionType::DOG_MODE,
+                                                           /*inbound_onion=*/false,
+                                                           /*network_key=*/0);
+    // $DOG Mode connections are persistent outbound, transaction-relaying connections
+    BOOST_CHECK(pnode->IsDogModeConn());
+    BOOST_CHECK(pnode->IsOutboundOrBlockRelayConn());
+    BOOST_CHECK(pnode->IsManualOrFullOutboundConn());
+    BOOST_CHECK(pnode->ExpectServicesFromConn());
+    BOOST_CHECK(!pnode->IsFullOutboundConn());
+    BOOST_CHECK(!pnode->IsBlockOnlyConn());
+    BOOST_CHECK(!pnode->IsManualConn());
+    BOOST_CHECK(!pnode->IsFeelerConn());
+    BOOST_CHECK(!pnode->IsAddrFetchConn());
+    BOOST_CHECK(!pnode->IsInboundConn());
+    BOOST_CHECK(!pnode->IsPrivateBroadcastConn());
+
+    // The connection type string used by RPC and -netinfo
+    BOOST_CHECK_EQUAL(ConnectionTypeAsString(ConnectionType::DOG_MODE), "dog");
+
+    // The NODE_DOG_MODE service flag
+    BOOST_CHECK(HasDogModeServiceFlag(ServiceFlags(NODE_NETWORK | NODE_WITNESS | NODE_DOG_MODE)));
+    BOOST_CHECK(!HasDogModeServiceFlag(ServiceFlags(NODE_NETWORK | NODE_WITNESS)));
+    BOOST_CHECK(!HasDogModeServiceFlag(NODE_NONE));
+    BOOST_CHECK_EQUAL(serviceFlagsToStr(NODE_DOG_MODE).front(), "DOG_MODE");
+}
+
+BOOST_AUTO_TEST_CASE(cconnman_dog_mode_clamp_test)
+{
+    // The number of $DOG Mode outbound slots is clamped against the
+    // connection budget remaining after the full-relay, block-relay and
+    // feeler slots, instead of trusting the caller-provided value.
+    struct Expected {
+        int max_connections;
+        int full_relay;
+        int block_relay;
+        int dog_mode;
+        int inbound;
+    };
+    const std::vector<Expected> tests{
+        // -maxconnections=11 leaves no budget for dog mode connections,
+        {11, 8, 2, 0, 0},
+        // they ramp up one per extra connection,
+        {12, 8, 2, 1, 0},
+        {13, 8, 2, 2, 0},
+        {14, 8, 2, 3, 0},
+        // reach the maximum at 15,
+        {15, 8, 2, 4, 0},
+        // and only above that do inbound slots appear.
+        {16, 8, 2, 4, 1},
+        {125, 8, 2, 4, 110},
+    };
+    for (const auto& t : tests) {
+        auto connman{std::make_unique<ConnmanTestMsg>(0x1337, 0x1337, *m_node.addrman, *m_node.netgroupman, Params())};
+        CConnman::Options options;
+        options.m_max_automatic_connections = t.max_connections;
+        options.m_max_outbound_dog_mode = MAX_DOG_MODE_CONNECTIONS;
+        connman->Init(options);
+        BOOST_CHECK_EQUAL(connman->GetMaxOutboundFullRelay(), t.full_relay);
+        BOOST_CHECK_EQUAL(connman->GetMaxOutboundBlockRelay(), t.block_relay);
+        BOOST_CHECK_EQUAL(connman->GetMaxOutboundDogMode(), t.dog_mode);
+        BOOST_CHECK_EQUAL(connman->GetMaxAutomaticOutbound(), t.full_relay + t.block_relay + MAX_FEELER_CONNECTIONS + t.dog_mode);
+        BOOST_CHECK_LE(connman->GetMaxAutomaticOutbound(), t.max_connections);
+        BOOST_CHECK_EQUAL(connman->GetMaxInbound(), t.inbound);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(cnetaddr_basic)
 {
     CNetAddr addr;

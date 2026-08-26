@@ -47,6 +47,13 @@ struct ConnmanTestMsg : public CConnman {
         m_peer_connect_timeout = timeout;
     }
 
+    int GetMaxOutboundFullRelay() const { return m_max_outbound_full_relay; }
+    int GetMaxOutboundBlockRelay() const { return m_max_outbound_block_relay; }
+    int GetMaxOutboundDogMode() const { return m_max_outbound_dog_mode; }
+    int GetMaxFeeler() const { return m_max_feeler; }
+    int GetMaxAutomaticOutbound() const { return m_max_automatic_outbound; }
+    int GetMaxInbound() const { return m_max_inbound; }
+
     void ResetAddrCache();
     void ResetMaxOutboundCycle();
     /// Reset the internal state.
@@ -125,6 +132,7 @@ constexpr ServiceFlags ALL_SERVICE_FLAGS[]{
     NODE_COMPACT_FILTERS,
     NODE_NETWORK_LIMITED,
     NODE_P2P_V2,
+    NODE_DOG_MODE,
 };
 
 constexpr NetPermissionFlags ALL_NET_PERMISSION_FLAGS[]{
@@ -148,6 +156,7 @@ constexpr ConnectionType ALL_CONNECTION_TYPES[]{
     ConnectionType::BLOCK_RELAY,
     ConnectionType::ADDR_FETCH,
     ConnectionType::PRIVATE_BROADCAST,
+    ConnectionType::DOG_MODE,
 };
 
 constexpr auto ALL_NETWORKS = std::array{
