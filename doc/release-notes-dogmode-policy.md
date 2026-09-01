@@ -31,7 +31,7 @@ Policy
 P2P
 ---
 
-- Nodes now advertise the `NODE_DOG_MODE` service flag (bit 28) and open up to
+- Nodes now advertise the `NODE_DOG_MODE` service flag (bit 14) and open up to
   4 extra long-lived outbound connections ("dog" connection type) to peers
   advertising the same flag, so that $DOG Mode nodes preferentially peer with
   each other. This is a port of Libre Relay's preferential peering (which uses
