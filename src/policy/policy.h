@@ -33,8 +33,11 @@ static constexpr unsigned int DEFAULT_COINBASE_OUTPUT_MAX_ADDITIONAL_SIGOPS{400}
 static constexpr unsigned int MINIMUM_BLOCK_RESERVED_WEIGHT{2000};
 /** Default for -blockmintxfee, which sets the minimum feerate for a transaction in blocks created by mining code **/
 static constexpr unsigned int DEFAULT_BLOCK_MIN_TX_FEE{1};
-/** The maximum weight for transactions we're willing to relay/mine */
-static constexpr int32_t MAX_STANDARD_TX_WEIGHT{400000};
+/** The maximum weight for transactions we're willing to relay/mine. This is
+ * just under MAX_BLOCK_WEIGHT so that a maximum size transaction can still be
+ * mined in a block (with a small coinbase), and its stripped serialization
+ * always fits within the 4MB MAX_PROTOCOL_MESSAGE_LENGTH limit. */
+static constexpr int32_t MAX_STANDARD_TX_WEIGHT{3'900'000};
 /** The minimum non-witness size for transactions we're willing to relay/mine: one larger than 64  */
 static constexpr unsigned int MIN_STANDARD_TX_NONWITNESS_SIZE{65};
 /** Maximum number of signature check operations in an IsStandard() P2SH script */
@@ -63,14 +66,18 @@ static constexpr unsigned int MAX_STANDARD_SCRIPTSIG_SIZE{1650};
  * Changing the dust limit changes which transactions are
  * standard and should be done with care and ideally rarely. It makes sense to
  * only increase the dust limit after prior releases were already not creating
- * outputs below the new threshold */
+ * outputs below the new threshold.
+ * Note: $DOG Mode caps the dust threshold at a global limit of 1 satoshi,
+ * so this feerate can only lower the dust limit further (see GetDustThreshold). */
 static constexpr unsigned int DUST_RELAY_TX_FEE{3000};
 /** Default for -minrelaytxfee, minimum relay fee for transactions */
 static constexpr unsigned int DEFAULT_MIN_RELAY_TX_FEE{100};
 /** Maximum number of transactions per cluster (default) */
 static constexpr unsigned int DEFAULT_CLUSTER_LIMIT{64};
-/** Maximum size of cluster in virtual kilobytes */
-static constexpr unsigned int DEFAULT_CLUSTER_SIZE_LIMIT_KVB{101};
+/** Maximum size of cluster in virtual kilobytes. Must be larger than
+ * MAX_STANDARD_TX_WEIGHT (in kvB) so that a maximum size standard transaction
+ * is accepted to the mempool as a cluster of one. */
+static constexpr unsigned int DEFAULT_CLUSTER_SIZE_LIMIT_KVB{976};
 /** Default for -limitancestorcount, max number of in-mempool ancestors */
 static constexpr unsigned int DEFAULT_ANCESTOR_LIMIT{25};
 /** Default for -limitdescendantcount, max number of in-mempool descendants */

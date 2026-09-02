@@ -158,11 +158,14 @@ class SendallTest(BitcoinTestFramework):
         assert_raises_rpc_error(-6, "Insufficient funds for fees after creating specified outputs.", self.wallet.sendall,
                 [{self.recipient: pre_sendall_balance}, self.remainder_target])
         assert_raises_rpc_error(-8, "Specified output amount to {} is below dust threshold".format(self.recipient),
-                self.wallet.sendall, [{self.recipient: 0.00000001}, self.remainder_target])
+                self.wallet.sendall, [{self.recipient: 0}, self.remainder_target])
         assert_raises_rpc_error(-6, "Dynamically assigned remainder results in dust output.", self.wallet.sendall,
                 [{self.recipient: pre_sendall_balance - fee}, self.remainder_target])
-        assert_raises_rpc_error(-6, "Dynamically assigned remainder results in dust output.", self.wallet.sendall,
-                [{self.recipient: pre_sendall_balance - fee - Decimal(0.00000010)}, self.remainder_target])
+        # With the global 1 sat dust limit, a remainder of 1 sat is viable and must be created
+        tx = self.wallet.sendall(recipients=[{self.recipient: pre_sendall_balance - fee - Decimal("0.00000001")}, self.remainder_target], add_to_wallet=False)
+        decoded_tx = self.wallet.decoderawtransaction(tx["hex"])
+        remainder_vout = next(o for o in decoded_tx["vout"] if o["scriptPubKey"].get("address") == self.remainder_target)
+        assert_equal(remainder_vout["value"], Decimal("0.00000001"))
 
     # @cleanup not needed because different wallet used
     def sendall_negative_effective_value(self):
@@ -459,18 +462,23 @@ class SendallTest(BitcoinTestFramework):
         self.log.info("Test that sendall fails if resulting transaction is too large")
 
         # Force the wallet to bulk-generate the addresses we'll need
-        self.wallet.keypoolrefill(1600)
+        self.wallet.keypoolrefill(15000)
 
-        # create many inputs
-        outputs = {self.wallet.getnewaddress(): 0.000025 for _ in range(1600)}
+        # Create enough inputs for the resulting transaction to exceed the
+        # 3,900,000 WU maximum standard transaction weight (each signed
+        # P2WPKH input weighs ~272 WU)
+        outputs = {self.wallet.getnewaddress(): 0.000025 for _ in range(15000)}
         self.def_wallet.sendmany(amounts=outputs)
         self.generate(self.nodes[0], 1)
 
+        # Use a low fee rate so the (large) fee stays below the default
+        # -maxtxfee and the transaction size limit is hit instead.
         assert_raises_rpc_error(
                 -4,
                 "Transaction too large.",
                 self.wallet.sendall,
-                recipients=[self.remainder_target])
+                recipients=[self.remainder_target],
+                options={"fee_rate": 1})
 
     def run_test(self):
         self.nodes[0].createwallet("activewallet")

@@ -329,6 +329,18 @@ enum ServiceFlags : uint64_t {
     // NODE_P2P_V2 means the node supports BIP324 transport
     NODE_P2P_V2 = (1 << 11),
 
+    // NODE_DOG_MODE means the node is a $DOG Mode node, implementing $DOG Mode
+    // relay policies. $DOG Mode nodes preferentially peer with each other to
+    // form a relay subnetwork for transactions that are non-standard on the
+    // rest of the network. Modeled on Libre Relay's NODE_LIBRE_RELAY (bit 29).
+    // Bit 14 is used rather than a bit in the experimental range below: that
+    // range is occupied by Bitcoin Knots (bits 24, 26-29, of which 28 is
+    // NODE_BLAKE2B, a proof-of-work hardfork signal, since the v29.4.1
+    // release candidates) and by Libre Relay (bit 29). Bit 14 is declared by
+    // no deployed client and was advertised by zero nodes in network crawls
+    // at the time of writing.
+    NODE_DOG_MODE = (1 << 14),
+
     // Bits 24-31 are reserved for temporary experiments. Just pick a bit that
     // isn't getting used, or one not being used much, and notify the
     // bitcoin-development mailing list. Remember that service bits are just
@@ -360,6 +372,14 @@ constexpr ServiceFlags SeedsServiceFlags() { return ServiceFlags(NODE_NETWORK | 
 static inline bool MayHaveUsefulAddressDB(ServiceFlags services)
 {
     return (services & NODE_NETWORK) || (services & NODE_NETWORK_LIMITED);
+}
+
+/**
+ * Checks if a peer with the given service flags is a $DOG Mode node.
+ */
+static inline bool HasDogModeServiceFlag(ServiceFlags services)
+{
+    return (services & NODE_DOG_MODE);
 }
 
 /** A CService with information about it as peer */

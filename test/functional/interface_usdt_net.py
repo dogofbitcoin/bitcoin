@@ -35,8 +35,8 @@ MAX_MSG_DATA_LENGTH = 150
 # from net_address.h
 NETWORK_TYPE_UNROUTABLE = 0
 # Use in -maxconnections. Results in a maximum of 21 inbound connections
-MAX_CONNECTIONS = 32
-MAX_INBOUND_CONNECTIONS = MAX_CONNECTIONS - 10 - 1  # 10 outbound and 1 feeler
+MAX_CONNECTIONS = 36
+MAX_INBOUND_CONNECTIONS = MAX_CONNECTIONS - 10 - 4 - 1  # 10 outbound, 4 dog mode and 1 feeler
 
 net_tracepoints_program = """
 #include <uapi/linux/ptrace.h>
